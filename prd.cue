@@ -1,5 +1,9 @@
 package prds
 
+import "strings"
+
+#NonBlank: string & =~"\\S"
+
 #SchemaVersion: =~"^[0-9]+\\.[0-9]+\\.[0-9]+$"
 #Date:          =~"^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
 
@@ -31,14 +35,14 @@ package prds
 }
 
 #JobExecutor: {
-	id:       string & =~"^[a-z][a-z0-9-]*$"
-	label:    string & !=""
+	id:         string & =~"^[a-z][a-z0-9-]*$"
+	label:      string & !=""
 	"core-job": string & !=""
 }
 
 #DesiredOutcome: {
-	id:           string & =~"^DO-[A-Z]+-\\d{3}$"
-	statement:    string & !=""
+	id:            string & =~"^DO-[A-Z]+-\\d{3}$"
+	statement:     string & !=""
 	"executor-id": string & =~"^[a-z][a-z0-9-]*$"
 }
 
@@ -62,8 +66,44 @@ package prds
 }
 
 #OpenQuestion: {
-	question: string & !=""
-	context?: string
+	question:  string & !=""
+	context?:  string
+	decision?: #Decision
+}
+
+#Decision: {
+	id:     string & =~"^DEC-[A-Z]+-\\d{3}$"
+	status: "Open" | "Resolved"
+	blocks!: [...{
+		phase:    =~"^[a-z][a-z0-9-]*$"
+		activity: #NonBlank
+	}]
+	authority: {
+		status:      "confirmed" | "unconfirmed"
+		description: #NonBlank
+	}
+	resolution?: #NonBlank
+	rationale?:  #NonBlank
+	if status == "Resolved" {
+		resolution: #NonBlank
+		rationale:  #NonBlank
+	}
+	if status == "Open" {
+		resolution?: error("resolution is only allowed on Resolved decisions")
+		rationale?:  error("rationale is only allowed on Resolved decisions")
+	}
+}
+
+#FeatureMapping: {
+	feature: #NonBlank
+	"fr-ids": [...=~"^FR-[A-Z]+-[0-9]{3}$"] & [_, ...]
+	"allocation-status": "allocated" | "unconfirmed"
+	evidence:            #NonBlank
+}
+
+#PhaseExitCriterion: {
+	description: #NonBlank
+	"requirement-ids"?: [...=~"^(FR|NFR)-[A-Z]+-[0-9]{3}$|^AC-[A-Z]+-[0-9]{3}-[0-9]{2}$"] & [_, ...]
 }
 
 #Dependency: {
@@ -77,7 +117,7 @@ package prds
 	remarks?: string
 }
 
-#PRDDocument: {
+#PRDDocument: D={
 	header: #PRDHeader
 	slug?:  string & =~"^[a-z][a-z0-9-]*$"
 
@@ -98,6 +138,23 @@ package prds
 	dependencies?: [...#Dependency] & [_, ...]
 
 	"open-questions"?: [...#OpenQuestion]
+	"feature-mappings"?: [...#FeatureMapping] & [_, ...]
+	lifecycle?: {diagram: #NonBlank, description: #NonBlank}
+	"reading-guide"?: #NonBlank
+	glossary?: [...{term: #NonBlank, definition: #NonBlank}] & [_, ...]
+	"phase-exit-criteria"?: [...#PhaseExitCriterion] & [_, ...]
+
+	// Validate local declarations; the Guard resolves inherited and family references.
+	if D["feature-mappings"] != _|_ {
+		if features != _|_ {
+			_featureSet: {for feature in features {(feature): true}}
+			_ck_mapping_feature: [for mapping in D["feature-mappings"] {_featureSet[mapping.feature] & true}]
+		}
+		if D["functional-requirements"] != _|_ {
+			_mappingFRSet: {for f in D["functional-requirements"] {(f.id): true}}
+			_ck_mapping_fr: [for mapping in D["feature-mappings"] for id in mapping["fr-ids"] {_mappingFRSet[id] & true}]
+		}
+	}
 
 	if phase != _|_ {
 		journeys: [...#Journey] & [_, ...]
@@ -112,6 +169,19 @@ package prds
 		_ck_orphan_fr: [for f in _fr {_implementedFR[f.id] & true}]
 		_ck_unknown_fr: [for j in journeys for s in j.steps for id in s.implements {_frSet[id] & true}]
 
+		if D["phase-exit-criteria"] != _|_ {
+			_exitRequirementSet: {
+				for f in _fr {
+					(f.id): true
+					for ac in f["acceptance-criteria"] {(ac.id): true}
+				}
+			}
+			// NFRs may be inherited from the parent and need the family review.
+			_ck_exit_requirement: [for criterion in D["phase-exit-criteria"] if criterion["requirement-ids"] != _|_ {
+				for id in criterion["requirement-ids"] if !strings.HasPrefix(id, "NFR-") {_exitRequirementSet[id] & true}
+			}]
+		}
+
 		// Maturity gate: acceptance criteria are optional at early stage (Draft)
 		// and required once a phase reaches Ready or Approved.
 		if state != _|_ {
@@ -122,7 +192,8 @@ package prds
 		}
 	}
 	if phase == _|_ {
-		title: string & !=""
+		"phase-exit-criteria"?: error("phase-exit-criteria is only allowed on phase PRDs")
+		title:                  string & !=""
 		"job-executors": [...#JobExecutor] & [_, ...]
 		// Optional here by design: a Draft parent may not have matured
 		// its outcomes yet. The prd-guard agent enforces the stricter
