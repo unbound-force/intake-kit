@@ -2,7 +2,8 @@ package prds
 
 import "strings"
 
-#NonBlank: string & =~"\\S"
+// Require a character outside the Unicode White_Space set.
+#NonBlank: string & =~"[^\\p{Z}\\t-\\r\\x{0085}]"
 
 #SchemaVersion: =~"^[0-9]+\\.[0-9]+\\.[0-9]+$"
 #Date:          =~"^[0-9]{4}-[0-9]{2}-[0-9]{2}$"

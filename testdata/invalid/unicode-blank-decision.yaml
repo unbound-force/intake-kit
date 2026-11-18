@@ -1,0 +1,12 @@
+header: {schema-version: 0.3.0, version: 1.0.0, last-updated: '2026-11-18'}
+title: Unicode whitespace validation
+job-executors: [{id: owner, label: Owner, core-job: Maintain content}]
+open-questions:
+  - question: Who approves maintenance?
+    decision:
+      id: DEC-TEST-001
+      status: Resolved
+      blocks: []
+      authority: {status: confirmed, description: "\u2003"}
+      resolution: "\u0085"
+      rationale: "\u00a0"

@@ -72,3 +72,7 @@ reaches `Ready` or `Approved`; optional at `Draft`).
 - `/prd-review` default behavior: previously always ran the full 5-agent
   council; now runs `cue vet` + Guard only unless `--full` is passed. Pass
   `--full` to get the prior behavior and the `Draft → Ready` gate.
+
+### Fixed
+- Reject Unicode-whitespace-only values in fields using the nonblank
+  constraint, including decision descriptions, resolutions, and rationales.
