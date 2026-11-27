@@ -1,0 +1,45 @@
+# Release pipeline: run from main with the tag (don't push tags yourself):
+#
+#   gh workflow run release.yml -f tag=v0.4.0
+#
+# The pipeline is jflowers/ship's shared cue-release.yml: the run must be on
+# main and the tag's major version must match the module path in
+# cue.mod/module.cue (@v0 -> v0.x.y); org-infra's preflight checks the tag
+# (semver, new, newer than the last), that CI's test job passed on HEAD
+# (`task vet-examples` and `task test`) and that there are unreleased
+# commits, then creates the tag. The module is published to the CUE Central
+# Registry with this repo's OIDC token, then the GitHub release is created.
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag to release (e.g. v0.4.0)'
+        required: true
+        type: string
+
+permissions: {}
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Release
+    uses: jflowers/ship/.github/workflows/cue-release.yml@3084f8ece73a531b8b797a5530cdad91620f3884 # v0.11.0
+    with:
+      tag: ${{ inputs.tag }}
+      # Keep in step with ci.yml's setup-cue version and cue.mod/module.cue.
+      cue_version: v0.17.0
+      # The check-run names on HEAD (bare job names from ci.yml). Keep in
+      # sync with .github/workflows/ci.yml if job names change.
+      ci_checks: '["test"]'
+    # The scopes cue-release.yml's jobs need: contents: write (tag,
+    # release), checks: read (CI verification), id-token: write (registry
+    # login).
+    permissions:
+      contents: write
+      checks: read
+      id-token: write

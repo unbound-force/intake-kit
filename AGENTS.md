@@ -61,9 +61,12 @@ Follow the existing agent files as a template when adding new ones.
 ## Working on the schema
 
 The CUE schema at `prd.cue` is published to the CUE Central
-Registry via the `publish-cue.yml` workflow on tag push. The module
+Registry by the `release.yml` workflow (jflowers/ship's shared
+`cue-release.yml`): run it from `main` with the tag, `gh workflow run
+release.yml -f tag=v0.4.0`, and don't push tags yourself. It creates the
+tag, publishes the module and creates the GitHub release. The module
 definition at `cue.mod/module.cue` controls the module path and
-language version.
+language version; the tag's major version must match its `@v0`.
 
 ## Tool Agnosticism
 
