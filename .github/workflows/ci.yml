@@ -10,7 +10,18 @@ on:
 permissions: {}
 
 jobs:
+  # Decides whether the test job must run: Dewey learnings PRs and gh-hud
+  # toolkit rollouts skip it; pushes and everything else run it.
+  scope:
+    uses: jflowers/ship/.github/workflows/pr-scope.yml@3b0ce8bf47183be402df9eaec16644c213eee5f7 # main, after v0.11.0
+    permissions:
+      contents: read
+
+  # Keep this a plain job named `test`: release.yml's preflight reads its
+  # check on main, where it always runs.
   test:
+    needs: scope
+    if: needs.scope.outputs.code == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -31,3 +42,30 @@ jobs:
         run: task vet-examples
       - name: Run test
         run: task test
+
+  # Required check. Passes only when scope succeeded and test ran and
+  # passed (code PRs, pushes) or was skipped (chore PRs). A failed scope
+  # job would otherwise skip test, and a skipped job counts as passing.
+  ci-ok:
+    name: CI OK
+    needs: [scope, test]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions: {}
+    steps:
+      - name: Check needed jobs
+        env:
+          SCOPE: ${{ needs.scope.result }}
+          CODE: ${{ needs.scope.outputs.code }}
+          TEST: ${{ needs.test.result }}
+        run: |
+          echo "scope=$SCOPE code=$CODE test=$TEST"
+          [ "$SCOPE" = success ] || { echo "::error::scope: $SCOPE"; exit 1; }
+          case "$CODE" in
+            true) want=success ;;
+            false) want=skipped ;;
+            *) echo "::error::scope code '$CODE'"; exit 1 ;;
+          esac
+          [ "$TEST" = "$want" ] || { echo "::error::test: $TEST, want $want"; exit 1; }
+          echo "CI passed."
